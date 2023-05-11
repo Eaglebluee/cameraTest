@@ -12,4 +12,5 @@ plugins {
     alias(libs.plugins.kotlin.serialization) apply false
     id("org.jetbrains.kotlin.android") version "1.8.0" apply false
     id("com.android.library") version "7.2.2" apply false
+    id("de.undercouch.download") version "5.4.0"
 }

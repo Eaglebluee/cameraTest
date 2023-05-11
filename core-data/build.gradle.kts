@@ -15,6 +15,7 @@ dependencies {
 
     implementation(libs.hilt.android)
     kapt(libs.hilt.compiler)
+    implementation(libs.bundles.retrofit)
 
     implementation(project(":core-model"))
     implementation(project(":core-network"))

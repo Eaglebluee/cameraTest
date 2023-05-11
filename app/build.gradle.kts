@@ -26,9 +26,21 @@ android {
     packagingOptions {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "META-INF/gradle/incremental.annotation.processors"
         }
     }
+
+    androidResources {
+        noCompress("tflite")
+    }
 }
+
+// import DownloadModels task
+project.extra["ASSET_DIR"] = projectDir.toString() + "/src/main/assets"
+
+// Download default models; if you wish to use your own models then
+// place them in the "assets" directory and comment out this line.
+apply(from = "download_models.gradle")
 
 dependencies {
 
@@ -39,6 +51,10 @@ dependencies {
     implementation(libs.hilt.android)
     implementation(libs.bundles.glide)
     kapt(libs.hilt.compiler)
+
+    implementation(libs.bundles.mediapipe)
+    implementation(libs.bundles.camerax)
+    implementation(libs.bundles.retrofit)
 
     implementation(project(":core-data"))
     implementation(project(":core-model"))
