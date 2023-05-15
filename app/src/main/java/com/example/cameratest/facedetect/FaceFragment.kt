@@ -1,4 +1,4 @@
-package com.example.cameratest.fragment
+package com.example.cameratest.facedetect
 
 /*
  * Copyright 2023 The TensorFlow Authors. All Rights Reserved.
@@ -33,14 +33,17 @@ import androidx.camera.core.AspectRatio
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
-import com.example.cameratest.FaceDetectorHelper
+import com.example.cameratest.FaceLandmarkerHelper
 import com.example.cameratest.MainViewModel
+import com.example.cameratest.R
+import com.example.cameratest.analyze.AnalyzeFragment
 import com.example.cameratest.databinding.FragmentFaceBinding
 import com.example.common_base.BaseFragment
 import com.example.common_util.FileUtil
@@ -62,7 +65,7 @@ import javax.inject.Inject
 
 @AndroidEntryPoint
 class FaceFragment @Inject constructor() : BaseFragment<FragmentFaceBinding>(),
-    FaceDetectorHelper.DetectorListener {
+    FaceLandmarkerHelper.LandmarkerListener {
 
     companion object {
         const val REQUEST_EXTERNAL_STORAGE = 1
@@ -70,16 +73,17 @@ class FaceFragment @Inject constructor() : BaseFragment<FragmentFaceBinding>(),
             Manifest.permission.READ_EXTERNAL_STORAGE,
             Manifest.permission.WRITE_EXTERNAL_STORAGE
         )
-        const val TAG = "FaceDetection"
+        private const val TAG = "Face Landmarker"
     }
 
-    private lateinit var faceDetectorHelper: FaceDetectorHelper
+    private lateinit var faceLandmarkerHelper: FaceLandmarkerHelper
     private val mainViewModel: MainViewModel by activityViewModels()
     private val faceViewModel by viewModels<FaceViewModel>()
     private var preview: Preview? = null
     private var imageAnalyzer: ImageAnalysis? = null
     private var camera: Camera? = null
     private var cameraProvider: ProcessCameraProvider? = null
+    private var cameraFacing = CameraSelector.LENS_FACING_FRONT
     private lateinit var analyzeFileName: String
 
     /** Blocking ML operations are performed using this executor */
@@ -98,14 +102,16 @@ class FaceFragment @Inject constructor() : BaseFragment<FragmentFaceBinding>(),
 
         // Create the FaceDetectionHelper that will handle the inference
         backgroundExecutor.execute {
-            faceDetectorHelper =
-                FaceDetectorHelper(
-                    context = requireContext(),
-                    threshold = mainViewModel.currentThreshold,
-                    currentDelegate = mainViewModel.currentDelegate,
-                    faceDetectorListener = this,
-                    runningMode = RunningMode.LIVE_STREAM
-                )
+            faceLandmarkerHelper = FaceLandmarkerHelper(
+                context = requireContext(),
+                runningMode = RunningMode.LIVE_STREAM,
+                minFaceDetectionConfidence = mainViewModel.currentMinFaceDetectionConfidence,
+                minFaceTrackingConfidence = mainViewModel.currentMinFaceTrackingConfidence,
+                minFacePresenceConfidence = mainViewModel.currentMinFacePresenceConfidence,
+                maxNumFaces = mainViewModel.currentMaxFaces,
+                currentDelegate = mainViewModel.currentDelegate,
+                faceLandmarkerHelperListener = this
+            )
 
             // Wait for the views to be properly laid out
             binding.viewFinder.post {
@@ -124,8 +130,8 @@ class FaceFragment @Inject constructor() : BaseFragment<FragmentFaceBinding>(),
         super.onResume()
 
         backgroundExecutor.execute {
-            if (faceDetectorHelper.isClosed()) {
-                faceDetectorHelper.setupFaceDetector()
+            if (faceLandmarkerHelper.isClosed()) {
+                faceLandmarkerHelper.setupFaceLandmarker()
             }
         }
     }
@@ -133,12 +139,15 @@ class FaceFragment @Inject constructor() : BaseFragment<FragmentFaceBinding>(),
     override fun onPause() {
         super.onPause()
 
-        // save FaceDetector settings
-        if (this::faceDetectorHelper.isInitialized) {
-            mainViewModel.setDelegate(faceDetectorHelper.currentDelegate)
-            mainViewModel.setThreshold(faceDetectorHelper.threshold)
-            // Close the face detector and release resources
-            backgroundExecutor.execute { faceDetectorHelper.clearFaceDetector() }
+        if(this::faceLandmarkerHelper.isInitialized) {
+            mainViewModel.setMaxFaces(faceLandmarkerHelper.maxNumFaces)
+            mainViewModel.setMinFaceDetectionConfidence(faceLandmarkerHelper.minFaceDetectionConfidence)
+            mainViewModel.setMinFaceTrackingConfidence(faceLandmarkerHelper.minFaceTrackingConfidence)
+            mainViewModel.setMinFacePresenceConfidence(faceLandmarkerHelper.minFacePresenceConfidence)
+            mainViewModel.setDelegate(faceLandmarkerHelper.currentDelegate)
+
+            // Close the FaceLandmarkerHelper and release resources
+            backgroundExecutor.execute { faceLandmarkerHelper.clearFaceLandmarker() }
         }
 
     }
@@ -175,36 +184,29 @@ class FaceFragment @Inject constructor() : BaseFragment<FragmentFaceBinding>(),
     private fun bindCameraUseCases() {
 
         // CameraProvider
-        val cameraProvider =
-            cameraProvider
-                ?: throw IllegalStateException("Camera initialization failed.")
+        val cameraProvider = cameraProvider
+            ?: throw IllegalStateException("Camera initialization failed.")
 
-        // CameraSelector - makes assumption that we're only using the back camera
         val cameraSelector =
-            CameraSelector.Builder()
-                .requireLensFacing(CameraSelector.LENS_FACING_FRONT).build()
+            CameraSelector.Builder().requireLensFacing(cameraFacing).build()
 
         // Preview. Only using the 4:3 ratio because this is the closest to our models
-        preview =
-            Preview.Builder()
-                .setTargetAspectRatio(AspectRatio.RATIO_4_3)
-                .setTargetRotation(binding.viewFinder.display.rotation)
-                .build()
+        preview = Preview.Builder().setTargetAspectRatio(AspectRatio.RATIO_4_3)
+            .setTargetRotation(binding.viewFinder.display.rotation)
+            .build()
 
         // ImageAnalysis. Using RGBA 8888 to match how our models work
         imageAnalyzer =
-            ImageAnalysis.Builder()
-                .setTargetAspectRatio(AspectRatio.RATIO_4_3)
+            ImageAnalysis.Builder().setTargetAspectRatio(AspectRatio.RATIO_4_3)
                 .setTargetRotation(binding.viewFinder.display.rotation)
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
                 .build()
                 // The analyzer can then be assigned to the instance
                 .also {
-                    it.setAnalyzer(
-                        backgroundExecutor,
-                        faceDetectorHelper::detectLivestreamFrame
-                    )
+                    it.setAnalyzer(backgroundExecutor) { image ->
+                        detectFace(image)
+                    }
                 }
 
         // Must unbind the use-cases before rebinding them
@@ -214,10 +216,7 @@ class FaceFragment @Inject constructor() : BaseFragment<FragmentFaceBinding>(),
             // A variable number of use-cases can be passed here -
             // camera provides access to CameraControl & CameraInfo
             camera = cameraProvider.bindToLifecycle(
-                this,
-                cameraSelector,
-                preview,
-                imageAnalyzer
+                this, cameraSelector, preview, imageAnalyzer
             )
 
             // Attach the viewfinder's surface provider to preview use case
@@ -227,6 +226,13 @@ class FaceFragment @Inject constructor() : BaseFragment<FragmentFaceBinding>(),
         }
     }
 
+    private fun detectFace(imageProxy: ImageProxy) {
+        faceLandmarkerHelper.detectLiveStream(
+            imageProxy = imageProxy,
+            isFrontCamera = cameraFacing == CameraSelector.LENS_FACING_FRONT
+        )
+    }
+
     private fun initScreenCapture() {
 
         binding.overlay.isInGuideLine.observe(viewLifecycleOwner) { isInGuideLine ->
@@ -234,7 +240,7 @@ class FaceFragment @Inject constructor() : BaseFragment<FragmentFaceBinding>(),
         }
 
         binding.capture.setOnClickListener {
-            faceDetectorHelper.captureFace {
+            faceLandmarkerHelper.captureFace {
                 captureScreen(it)
                 uploadImage(it)
             }
@@ -290,6 +296,7 @@ class FaceFragment @Inject constructor() : BaseFragment<FragmentFaceBinding>(),
 
     private fun uploadImage(bitmap: Bitmap) {
         val transferUri = bitmapToUri(bitmap)
+        mainViewModel.photoUri = transferUri
         val file = FileUtil.makeFile(getCacheRootPath(), transferUri)
 
         FileUtil.writeBitmapToFile(bitmap, Bitmap.CompressFormat.JPEG, 80, file.path)
@@ -339,17 +346,6 @@ class FaceFragment @Inject constructor() : BaseFragment<FragmentFaceBinding>(),
 
     private fun observeViewModel() {
 
-        faceViewModel.reportState.onUiState(
-            success = {
-                Log.d("123123123", "분석 결과 받기 성공!!")
-                Log.d("123123123", "결과 : ${it.results.size}")
-
-            },
-            error = {
-                Log.d("123123123", "분석 결과 받기 실패... : $it")
-            }
-        )
-
         faceViewModel.uploadImageState.onUiState(
             success = {
                 Log.d("123123123", "사진 업로드 성공!!!: ${it.files[0].imginfo}")
@@ -357,7 +353,12 @@ class FaceFragment @Inject constructor() : BaseFragment<FragmentFaceBinding>(),
                 val imgName = "/".plus(timeStamp).plus("/1/")
                     .plus(it.files[0].imginfo.replace("|480|640", ""))
                 Log.d("123123123", "바뀐 폴더 이름!!!: ${imgName}")
-                faceViewModel.getAnalyzeReport(imgName)
+
+                mainViewModel.imgName = imgName
+
+                mainViewModel.screenState = MainViewModel.ScreenState.Analyze
+                replaceFragment(R.id.fragmentContainer, AnalyzeFragment(), parentFragmentManager)
+
             },
             error = {
                 Log.d("123123123", "사진 업로드 실패... : $it")
@@ -371,27 +372,30 @@ class FaceFragment @Inject constructor() : BaseFragment<FragmentFaceBinding>(),
     }
 
 
-    // Update UI after faces have been detected. Extracts original image height/width
-    // to scale and place bounding boxes properly through OverlayView
-    override fun onResults(resultBundle: FaceDetectorHelper.ResultBundle) {
-        activity?.runOnUiThread {
+    // Update UI after face have been detected. Extracts original
+    // image height/width to scale and place the landmarks properly through
+    // OverlayView
+    override fun onResults(
+        resultBundle: FaceLandmarkerHelper.ResultBundle
+    ) {
+        if(mainViewModel.screenState is MainViewModel.ScreenState.Detect) {
+            activity?.runOnUiThread {
 
-            // Pass necessary information to OverlayView for drawing on the canvas
-            val detectionResult = resultBundle.results[0]
-            if (isAdded) {
+                // Pass necessary information to OverlayView for drawing on the canvas
                 binding.overlay.setResults(
-                    detectionResult,
+                    resultBundle.result,
                     resultBundle.inputImageHeight,
-                    resultBundle.inputImageWidth
+                    resultBundle.inputImageWidth,
+                    RunningMode.LIVE_STREAM,
+                    mainViewModel.screenState
                 )
+
+                // Force a redraw
+                binding.overlay.invalidate()
+
             }
-
-            // Force a redraw
-            binding.overlay.invalidate()
-
         }
     }
-
 
     override fun onError(error: String, errorCode: Int) {
         activity?.runOnUiThread {

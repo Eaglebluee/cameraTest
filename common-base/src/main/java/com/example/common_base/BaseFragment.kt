@@ -4,8 +4,10 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.annotation.IdRes
 import androidx.databinding.ViewDataBinding
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.FragmentManager
 import androidx.lifecycle.LifecycleOwner
 import com.bumptech.glide.Glide
 import com.bumptech.glide.RequestManager
@@ -46,6 +48,20 @@ abstract class BaseFragment<Binding: ViewDataBinding> : Fragment(), ImageViewExt
     override fun onDestroyView() {
         _binding = null
         super.onDestroyView()
+    }
+
+    fun replaceFragment(
+        @IdRes containerId: Int,
+        fragment: Fragment?,
+        fragmentManager: FragmentManager = childFragmentManager,
+        addBackStack : Boolean = false
+    ) {
+        requireNotNull(fragment)
+        val transaction = fragmentManager.beginTransaction()
+        transaction.replace(containerId, fragment).apply {
+            if(addBackStack) addToBackStack(null)
+        }
+        transaction.commitAllowingStateLoss()
     }
 
 }

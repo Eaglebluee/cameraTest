@@ -29,10 +29,6 @@ android {
             excludes += "META-INF/gradle/incremental.annotation.processors"
         }
     }
-
-    androidResources {
-        noCompress("tflite")
-    }
 }
 
 // import DownloadModels task

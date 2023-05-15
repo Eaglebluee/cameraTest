@@ -1,10 +1,10 @@
 package com.example.core_model
 
-data class ReportResponseData(
-    val results: List<ReportData> = listOf()
+data class FaceReportResponseData(
+    val results: List<FaceReportData> = listOf()
 )
 
-data class ReportData(
+data class FaceReportData(
     val title: String = "",
     val label: String = "",
     val content: String = ""

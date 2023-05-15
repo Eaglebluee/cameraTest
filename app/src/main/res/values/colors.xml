@@ -2,6 +2,7 @@
 <resources>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    <color name="grey">#666673</color>
 
     <color name="mp_primary">#007F8B</color>
     <color name="mp_variant">#12B5CB</color>
@@ -12,6 +13,12 @@
     <color name="icActive">#FFFFFFFF</color>
     <color name="icFocused">#DDFFFFFF</color>
     <color name="icPressed">#AAFFFFFF</color>
+    <color name="mp_color_primary">#007F8B</color>
+    <color name="mp_color_primary_variant">#12B5CB</color>
+    <color name="mp_color_primary_dark">#00676D</color>
+    <color name="mp_color_secondary">#FBBC04</color>
+    <color name="mp_color_secondary_variant">#F9AB00</color>
+    <color name="mp_color_error">#B00020</color>
 
     <color name="isInGuideLine">#00FF80</color>
     <color name="isOutGuideLine">#FF0000</color>

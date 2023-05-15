@@ -1,6 +1,6 @@
 package com.example.core_data.repository
 
-import com.example.core_model.ReportResponseData
+import com.example.core_model.FaceReportResponseData
 import com.example.core_network.datasource.ReportRemoteDataSource
 import kotlinx.coroutines.flow.Flow
 import okhttp3.RequestBody
@@ -10,6 +10,6 @@ class ReportRepositoryImpl @Inject constructor(
     private val reportRemoteDataSource: ReportRemoteDataSource
 ): ReportRepository {
 
-    override fun reqAnalyzeReport(raw: RequestBody): Flow<ReportResponseData>  = reportRemoteDataSource.reqAnalyzeReport(raw)
+    override fun reqAnalyzeReport(raw: RequestBody): Flow<FaceReportResponseData>  = reportRemoteDataSource.reqAnalyzeReport(raw)
 
 }
