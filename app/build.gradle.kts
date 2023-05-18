@@ -37,6 +37,7 @@ project.extra["ASSET_DIR"] = projectDir.toString() + "/src/main/assets"
 // Download default models; if you wish to use your own models then
 // place them in the "assets" directory and comment out this line.
 apply(from = "download_models.gradle")
+apply(from = "download_tasks.gradle")
 
 dependencies {
 

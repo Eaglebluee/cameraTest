@@ -16,12 +16,13 @@ package com.example.cameratest.facedetect
  * limitations under the License.
  */
 
-import android.Manifest
 import android.annotation.SuppressLint
+import android.content.ContentResolver
+import android.content.ContentValues
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.net.Uri
+import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.util.Log
@@ -36,10 +37,10 @@ import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
+import androidx.lifecycle.lifecycleScope
 import com.example.cameratest.FaceLandmarkerHelper
 import com.example.cameratest.MainViewModel
 import com.example.cameratest.R
@@ -49,30 +50,32 @@ import com.example.common_base.BaseFragment
 import com.example.common_util.FileUtil
 import com.google.mediapipe.tasks.vision.core.RunningMode
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.asRequestBody
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
 import java.net.URLEncoder
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
+import java.util.Locale
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
+
 
 @AndroidEntryPoint
 class FaceFragment @Inject constructor() : BaseFragment<FragmentFaceBinding>(),
     FaceLandmarkerHelper.LandmarkerListener {
 
     companion object {
-        const val REQUEST_EXTERNAL_STORAGE = 1
-        private val PERMISSIONS_STORAGE = arrayOf(
-            Manifest.permission.READ_EXTERNAL_STORAGE,
-            Manifest.permission.WRITE_EXTERNAL_STORAGE
-        )
         private const val TAG = "Face Landmarker"
     }
 
@@ -128,7 +131,6 @@ class FaceFragment @Inject constructor() : BaseFragment<FragmentFaceBinding>(),
 
     override fun onResume() {
         super.onResume()
-
         backgroundExecutor.execute {
             if (faceLandmarkerHelper.isClosed()) {
                 faceLandmarkerHelper.setupFaceLandmarker()
@@ -241,15 +243,55 @@ class FaceFragment @Inject constructor() : BaseFragment<FragmentFaceBinding>(),
 
         binding.capture.setOnClickListener {
             faceLandmarkerHelper.captureFace {
-                captureScreen(it)
+                if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    captureScreenHigherVersion(it)
+                }else {
+                    captureScreen(it)
+                }
                 uploadImage(it)
             }
         }
 
     }
 
+    private fun captureScreenHigherVersion(bitmap: Bitmap) {
+        val filename = "screenshot_${System.currentTimeMillis()}.png"
+        val values = ContentValues().apply {
+            put(MediaStore.Images.Media.DISPLAY_NAME, filename)
+            put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+        }
+
+        val resolver: ContentResolver = requireContext().contentResolver
+        var uri = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+
+        values.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES)
+        values.put(MediaStore.Images.Media.IS_PENDING, true)
+        uri = resolver.insert(uri, values) ?: return
+
+        viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val outputStream = resolver.openOutputStream(uri)
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
+                outputStream?.flush()
+                outputStream?.close()
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    values.put(MediaStore.Images.Media.IS_PENDING, false)
+                    resolver.update(uri, values, null, null)
+                }
+
+                withContext(Dispatchers.Main) {
+                    // 이미지 저장이 완료되었음을 알리는 메시지
+                    Toast.makeText(context, "이미지가 저장되었습니다.", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: IOException) {
+                e.printStackTrace()
+            }
+        }
+
+    }
+
     private fun captureScreen(bitmap: Bitmap) {
-        verifyStoragePermissions()
         // 파일 저장
         val filename = "screenshot_${System.currentTimeMillis()}.png"
         val file = File(Environment.getExternalStorageDirectory(), filename)
@@ -267,23 +309,6 @@ class FaceFragment @Inject constructor() : BaseFragment<FragmentFaceBinding>(),
         } catch (e: Exception) {
             Toast.makeText(requireContext(), "저장 실패! ${e.printStackTrace()}", Toast.LENGTH_SHORT)
                 .show()
-        }
-    }
-
-
-    private fun verifyStoragePermissions() {
-        // Check if we have write permission
-        val permission = ActivityCompat.checkSelfPermission(
-            requireActivity(),
-            Manifest.permission.WRITE_EXTERNAL_STORAGE
-        )
-        if (permission != PackageManager.PERMISSION_GRANTED) {
-            // We don't have permission so prompt the user
-            ActivityCompat.requestPermissions(
-                requireActivity(),
-                PERMISSIONS_STORAGE,
-                REQUEST_EXTERNAL_STORAGE
-            )
         }
     }
 
@@ -318,7 +343,8 @@ class FaceFragment @Inject constructor() : BaseFragment<FragmentFaceBinding>(),
     private fun bitmapToUri(bitmap: Bitmap): Uri {
         val timeStamp = SimpleDateFormat("yyyy/MM/dd").format(Date())
         val fileName = SimpleDateFormat("yyyyMMdd_HHmmss").format(Date())
-        val imageFileName = "yeo_photo/".plus(timeStamp).plus("/1/").plus(fileName).plus(".jpg")
+        val folderPath = getCurrentTime()
+        val imageFileName = "yeo_photo/".plus(timeStamp).plus("/${folderPath}/").plus(fileName).plus(".jpg")
         analyzeFileName = "/".plus(timeStamp).plus("/1/1_").plus(timeStamp).plus(".jpg")
         val bytes = ByteArrayOutputStream()
         bitmap.compress(Bitmap.CompressFormat.JPEG, 100, bytes)
@@ -329,6 +355,19 @@ class FaceFragment @Inject constructor() : BaseFragment<FragmentFaceBinding>(),
             null
         )
         return Uri.parse(path)
+    }
+
+    private fun getCurrentTime(): String {
+        val currentTime = Calendar.getInstance().time
+        val format = SimpleDateFormat("a", Locale.getDefault())
+        val formatTime = SimpleDateFormat("hh", Locale.getDefault())
+        val amPm = format.format(currentTime)
+
+        return when {
+            amPm == "오전" && formatTime.format(Date()).toInt() <= 10 -> "0"
+            amPm == "오후" && formatTime.format(Date()).toInt() > 6 -> "2"
+            else -> "1"
+        }
     }
 
     private fun getCacheRootPath(): String {
@@ -350,7 +389,8 @@ class FaceFragment @Inject constructor() : BaseFragment<FragmentFaceBinding>(),
             success = {
                 Log.d("123123123", "사진 업로드 성공!!!: ${it.files[0].imginfo}")
                 val timeStamp = SimpleDateFormat("yyyy/MM/dd").format(Date())
-                val imgName = "/".plus(timeStamp).plus("/1/")
+                val folderPath = getCurrentTime()
+                val imgName = "/".plus(timeStamp).plus("/${folderPath}/")
                     .plus(it.files[0].imginfo.replace("|480|640", ""))
                 Log.d("123123123", "바뀐 폴더 이름!!!: ${imgName}")
 
