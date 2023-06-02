@@ -9,7 +9,7 @@ import com.example.common_base.BaseDiffUtilAdapter
 import com.example.common_base.BaseViewHolder
 import com.example.core_model.FaceReportData
 
-class ResultAdapter(
+class FaceResultAdapter(
     private val context: Context,
     override val requestManager: RequestManager
 ): BaseDiffUtilAdapter<ItemFaceResultBinding, FaceReportData>(requestManager) {

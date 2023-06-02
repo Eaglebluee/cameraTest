@@ -1,4 +1,4 @@
-package com.example.cameratest
+package com.example.cameratest.overlay
 
 import android.content.Context
 import android.graphics.Canvas
@@ -6,18 +6,23 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
+import android.graphics.drawable.Drawable
 import android.util.AttributeSet
+import android.util.Log
 import android.view.View
+import android.widget.ImageView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
+import com.example.cameratest.MainViewModel
+import com.example.cameratest.R
 import com.google.mediapipe.tasks.vision.core.RunningMode
-import com.google.mediapipe.tasks.vision.facedetector.FaceDetectorResult
 import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarkerResult
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 
-class OverlayView(context: Context?, attrs: AttributeSet?) :
+class FaceOverlayView(context: Context?, attrs: AttributeSet?) :
     View(context, attrs) {
 
     private var results: FaceLandmarkerResult? = null
@@ -33,7 +38,11 @@ class OverlayView(context: Context?, attrs: AttributeSet?) :
     private var imageWidth: Int = 1
     private var imageHeight: Int = 1
 
-    private var bounds = Rect()
+    var resultNum = 0
+
+    private val guideLimit = -800
+    private val frontLimit = 150
+    private lateinit var guideText: String
 
     private val _isInGuideLine = MutableLiveData(false)
     val isInGuideLine : LiveData<Boolean> =  _isInGuideLine
@@ -72,13 +81,12 @@ class OverlayView(context: Context?, attrs: AttributeSet?) :
         guidePaint.strokeWidth = 8F
         guidePaint.style = Paint.Style.STROKE
 
-        linePaint.color =
-            ContextCompat.getColor(context!!, R.color.mp_color_primary)
-        linePaint.strokeWidth = LANDMARK_STROKE_WIDTH
+        linePaint.color = Color.WHITE
+        linePaint.strokeWidth = 4F
         linePaint.style = Paint.Style.STROKE
 
-        pointPaint.color = Color.YELLOW
-        pointPaint.strokeWidth = LANDMARK_STROKE_WIDTH
+        pointPaint.color = Color.WHITE
+        pointPaint.strokeWidth = 4F
         pointPaint.style = Paint.Style.FILL
     }
 
@@ -93,39 +101,52 @@ class OverlayView(context: Context?, attrs: AttributeSet?) :
                 drawAnalyzeScreen(canvas)
             }
             MainViewModel.ScreenState.Result -> {
-
+                drawResultScreen(canvas)
             }
         }
-
-
     }
 
     private fun drawDetectScreen(canvas: Canvas) {
         results?.let { faceLandmarkerResult ->
             for(landmark in faceLandmarkerResult.faceLandmarks()) {
-//                for(normalizedLandmark in landmark) {
-//                    canvas.drawPoint(normalizedLandmark.x() * imageWidth * scaleFactor * 0.725f, normalizedLandmark.y() * imageHeight * 2.25f, pointPaint)
-//                }
 
-                val leftCheekX = landmark[234].x() * imageWidth * scaleFactor * 0.725f
-                val leftCheekY = landmark[234].y() * imageHeight * 2.25f
-                val rightCheekX = landmark[454].x() * imageWidth * scaleFactor * 0.725f
-                val rightCheekY = landmark[454].y() * imageHeight * 2.25f
+                val leftCheekX = landmark[234].x() * imageWidth * scaleFactor * 0.75f
+                val leftCheekY = landmark[234].y() * imageHeight * scaleFactor * 0.75f
+                val rightCheekX = landmark[454].x() * imageWidth * scaleFactor * 0.75f
+                val rightCheekY = landmark[454].y() * imageHeight * scaleFactor * 0.75f
                 val foreHead = landmark[10]
                 val jaw = landmark[152]
 
-                val top = foreHead.y() * imageHeight * 2.25f - 20f
-                val left = leftCheekX - 20f
-                val right = rightCheekX + 20f
-                val bottom = jaw.y() * imageHeight * 2.25f + 20f
+                val top = foreHead.y() * imageHeight * scaleFactor * 0.5f
+                val left = leftCheekX
+                val right = rightCheekX
+                val bottom = jaw.y() * imageHeight * scaleFactor * 0.75f
+                val distance = top - bottom
 
                 // Draw bounding box guideline
-                val guideTop = 200f
-                val guideBottom = 1050f
-                val guideLeft = 150f
-                val guideRight = 900f
+                val guideTop = height / 7f
+                val guideBottom = height / 7f * 5f
+                val guideLeft = width / 5f
+                val guideRight = width / 5f * 4f
 
-                _isInGuideLine.value = top > guideTop && bottom < guideBottom && left > guideLeft && right < guideRight
+                val inGuide = top > guideTop && bottom < guideBottom && left > guideLeft && right < guideRight
+                val inLimit = distance < guideLimit
+
+                // 양옆 차이
+                val sideDiff = abs((
+                        landmark[454].x() * imageWidth * scaleFactor * 0.75f - landmark[1].x() * imageWidth * scaleFactor * 0.75f) -
+                        (landmark[1].x() * imageWidth * scaleFactor * 0.75f - landmark[234].x() * imageWidth * scaleFactor * 0.75f)
+                )
+
+                // 위 아래 차이
+                val upDownDiff = abs(
+                    (landmark[1].y() * imageWidth * scaleFactor * 0.75f - landmark[10].y() * imageWidth * scaleFactor * 0.75f) -
+                        (landmark[152].y() * imageWidth * scaleFactor * 0.75f - landmark[1].y() * imageWidth * scaleFactor * 0.75f)
+                )
+
+                val isFront = sideDiff < 150 && upDownDiff < 150
+
+                _isInGuideLine.value =  inGuide && inLimit && isFront
                 boxPaint.color = ContextCompat.getColor(context!!, if(isInGuideLine.value!!) R.color.isInGuideLine else R.color.isOutGuideLine)
 
                 val drawableRect = RectF(left, top, right, bottom)
@@ -133,16 +154,28 @@ class OverlayView(context: Context?, attrs: AttributeSet?) :
 
                 val drawableGuideRect = RectF(guideLeft, guideTop, guideRight, guideBottom)
                 canvas.drawRect(drawableGuideRect, guidePaint)
-
-                canvas.drawPoint(leftCheekX, leftCheekY, pointPaint)
-                canvas.drawPoint(rightCheekX, rightCheekY, pointPaint)
                 canvas.drawLine(leftCheekX, leftCheekY, rightCheekX, rightCheekY, guidePaint)
 
 
+                guideText = when {
+                    inGuide && !inLimit -> {
+                        "조금 더 가까이 와주세요"
+                    }
+                    inGuide && !isFront -> {
+                        "얼굴을 정면으로 맞춰주세요"
+                    }
+                    inGuide && inLimit && isFront -> {
+                        "아래 버튼을 눌러 촬영해주세요"
+                    }
+                    else -> {
+                        "얼굴을 가이드라인에 맞춰주세요"
+                    }
+                }
+
                 canvas.drawText(
-                    "얼굴을 가이드라인에 맞춰주세요",
-                    guideLeft,
-                    guideBottom + 250f,
+                    guideText,
+                    guideLeft + 50f,
+                    guideBottom + 100f,
                     textPaint
                 )
 
@@ -161,9 +194,9 @@ class OverlayView(context: Context?, attrs: AttributeSet?) :
 
                 val rightEyeList = listOf(33, 246, 161, 160, 159, 158, 157, 173, 133, 155, 154, 153, 145, 144, 163, 7, 33)
 
-                val leftEyebrowList = listOf(336, 296, 334, 293, 300, 336)
+                val leftEyebrowList = listOf(336, 296, 334, 293, 300)
 
-                val rightEyebrowList = listOf(107, 66, 105, 63, 70, 107)
+                val rightEyebrowList = listOf(107, 66, 105, 63, 70)
 
                 val mouthList = listOf(0, 267, 269, 270, 409, 291, 292, 415, 310, 311, 312, 13, 82, 81, 80, 191,
                     62, 95, 88, 178, 87, 14, 317, 402, 318, 324, 291, 375, 321, 405, 314, 17,
@@ -174,13 +207,42 @@ class OverlayView(context: Context?, attrs: AttributeSet?) :
                 val drawList = listOf(faceList, leftEyeList, rightEyeList, leftEyebrowList, rightEyebrowList, mouthList, noseList)
 
                 drawList.forEach { list ->
-                    for(i in 0 until list.size - 1) {
-                        val startX = landmark[list[i]].x() * imageWidth * scaleFactor
-                        val startY = landmark[list[i]].y() * imageHeight * 2.25f
-                        val endX = landmark[list[i+1]].x() * imageWidth * scaleFactor
-                        val endY = landmark[list[i+1]].y() * imageHeight * 2.25f
-                        canvas.drawLine(startX, startY, endX, endY, guidePaint)
+                    for(i in list.indices) {
+                        val pointX = landmark[list[i]].x() * imageWidth * scaleFactor
+                        val pointY = landmark[list[i]].y() * imageHeight * 2.25f
+                        canvas.drawPoint(pointX, pointY, pointPaint)
                     }
+                }
+
+            }
+
+        }
+    }
+
+    private fun drawResultScreen(canvas: Canvas) {
+        results?.let { faceLandmarkerResult ->
+            for(landmark in faceLandmarkerResult.faceLandmarks()) {
+                val faceList = listOf(10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400,
+                    377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109, 10)
+
+                val eyeList = listOf(263, 466, 388, 387, 386, 385, 384, 398, 362, 382, 381, 380, 374, 373, 390, 249, 33, 246, 161, 160, 159, 158, 157, 173, 133, 155, 154, 153, 145, 144, 163, 7)
+
+                val eyebrowList = listOf(336, 296, 334, 293, 300, 107, 66, 105, 63, 70)
+
+                val mouthList = listOf(0, 267, 269, 270, 409, 291, 292, 415, 310, 311, 312, 13, 82, 81, 80, 191,
+                    62, 95, 88, 178, 87, 14, 317, 402, 318, 324, 291, 375, 321, 405, 314, 17,
+                    84, 181, 91, 146, 61, 185, 40, 39, 37, 0)
+
+                val noseList = listOf(99, 240, 48, 49, 209, 198, 174, 245,  193, 168, 417, 465, 399, 420, 429, 279, 278 , 460, 328, 2, 99)
+
+                val drawList = listOf(faceList, eyeList, eyebrowList, noseList, mouthList)
+
+                val xDiff = width / 8f
+
+                for(i in 0 until drawList[resultNum].size) {
+                    val pointX = landmark[drawList[resultNum][i]].x() * imageWidth * scaleFactor + xDiff
+                    val pointY = landmark[drawList[resultNum][i]].y() * imageHeight * scaleFactor
+                    canvas.drawPoint(pointX, pointY, pointPaint)
                 }
 
             }
@@ -212,7 +274,8 @@ class OverlayView(context: Context?, attrs: AttributeSet?) :
                 // PreviewView is in FILL_START mode. So we need to scale up the
                 // landmarks to match with the size that the captured images will be
                 // displayed.
-                max(width * 1f / imageWidth, height * 1f / imageHeight)
+                // max(width * 1f / imageWidth, height * 1f / imageHeight)
+                3.046875f
             }
         }
         invalidate()

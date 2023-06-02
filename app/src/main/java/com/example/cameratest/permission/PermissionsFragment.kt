@@ -9,7 +9,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import com.example.cameratest.R
-import com.example.cameratest.facedetect.FaceFragment
+import com.example.cameratest.detection.FaceFragment
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 

@@ -5,13 +5,13 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.view.View
 import androidx.activity.viewModels
-import androidx.annotation.RequiresApi
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.example.cameratest.databinding.ActivityMainBinding
-import com.example.cameratest.facedetect.FaceFragment
-import com.example.cameratest.permission.PermissionsFragment
+import com.example.cameratest.detection.FaceFragment
+import com.example.cameratest.detection.HandFragment
 import com.example.common_base.BaseActivity
+import com.example.common_util.replaceFragment
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -19,16 +19,21 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
 
     private val PERMISSIONS_REQUEST_CODE = 123
 
-    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     private val requiredPermissions = arrayOf(
         Manifest.permission.READ_EXTERNAL_STORAGE,
         Manifest.permission.WRITE_EXTERNAL_STORAGE,
         Manifest.permission.CAMERA
     )
 
+    private val requiredPermissionsHigh = arrayOf(
+        Manifest.permission.CAMERA,
+        Manifest.permission.READ_MEDIA_IMAGES,
+        Manifest.permission.READ_MEDIA_VIDEO
+    )
+
     private val viewModel by viewModels<MainViewModel>()
     private var faceFragment: FaceFragment? = null
-    private var permissionFragment: PermissionsFragment? = null
+    private var handFragment: HandFragment? = null
 
     override fun createBinding() = ActivityMainBinding.inflate(layoutInflater)
 
@@ -50,6 +55,8 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
             binding.btnFace.visibility = View.VISIBLE
             binding.btnHand.visibility = View.VISIBLE
             binding.fragmentContainer.visibility = View.GONE
+            faceFragment = null
+            handFragment = null
         }
 
     }
@@ -61,25 +68,38 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
             btnHand.visibility = View.GONE
             fragmentContainer.visibility = View.VISIBLE
             faceFragment = FaceFragment()
-            addFragment(R.id.fragmentContainer, faceFragment)
+            replaceFragment(R.id.fragmentContainer, faceFragment)
         }
 
         btnHand.setOnClickListener {
-
+            btnFace.visibility = View.GONE
+            btnHand.visibility = View.GONE
+            fragmentContainer.visibility = View.VISIBLE
+            handFragment = HandFragment()
+            replaceFragment(R.id.fragmentContainer, handFragment)
         }
 
     }
 
-    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     private fun checkPermissions() {
         val permissionsToRequest = mutableListOf<String>()
 
-        for (permission in requiredPermissions) {
-            val result = ContextCompat.checkSelfPermission(this, permission)
-            if (result != PackageManager.PERMISSION_GRANTED) {
-                permissionsToRequest.add(permission)
+        if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            for (permission in requiredPermissionsHigh) {
+                val result = ContextCompat.checkSelfPermission(this, permission)
+                if (result != PackageManager.PERMISSION_GRANTED) {
+                    permissionsToRequest.add(permission)
+                }
+            }
+        }else {
+            for (permission in requiredPermissions) {
+                val result = ContextCompat.checkSelfPermission(this, permission)
+                if (result != PackageManager.PERMISSION_GRANTED) {
+                    permissionsToRequest.add(permission)
+                }
             }
         }
+
 
         if (permissionsToRequest.isNotEmpty()) {
             ActivityCompat.requestPermissions(

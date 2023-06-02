@@ -1,4 +1,4 @@
-package com.example.cameratest.facedetect
+package com.example.cameratest.detection
 
 /*
  * Copyright 2023 The TensorFlow Authors. All Rights Reserved.
@@ -41,11 +41,11 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
-import com.example.cameratest.FaceLandmarkerHelper
 import com.example.cameratest.MainViewModel
 import com.example.cameratest.R
-import com.example.cameratest.analyze.AnalyzeFragment
+import com.example.cameratest.analyze.FaceAnalyzeFragment
 import com.example.cameratest.databinding.FragmentFaceBinding
+import com.example.cameratest.landmarkerhelper.FaceLandmarkerHelper
 import com.example.common_base.BaseFragment
 import com.example.common_util.FileUtil
 import com.google.mediapipe.tasks.vision.core.RunningMode
@@ -75,13 +75,10 @@ import javax.inject.Inject
 class FaceFragment @Inject constructor() : BaseFragment<FragmentFaceBinding>(),
     FaceLandmarkerHelper.LandmarkerListener {
 
-    companion object {
-        private const val TAG = "Face Landmarker"
-    }
-
+    private val TAG = "Face Landmarker"
     private lateinit var faceLandmarkerHelper: FaceLandmarkerHelper
     private val mainViewModel: MainViewModel by activityViewModels()
-    private val faceViewModel by viewModels<FaceViewModel>()
+    private val viewModel by viewModels<FaceViewModel>()
     private var preview: Preview? = null
     private var imageAnalyzer: ImageAnalysis? = null
     private var camera: Camera? = null
@@ -100,6 +97,8 @@ class FaceFragment @Inject constructor() : BaseFragment<FragmentFaceBinding>(),
 
     override fun initFragment() {
 
+        observeViewModel()
+
         // Initialize our background executor
         backgroundExecutor = Executors.newSingleThreadExecutor()
 
@@ -108,11 +107,11 @@ class FaceFragment @Inject constructor() : BaseFragment<FragmentFaceBinding>(),
             faceLandmarkerHelper = FaceLandmarkerHelper(
                 context = requireContext(),
                 runningMode = RunningMode.LIVE_STREAM,
-                minFaceDetectionConfidence = mainViewModel.currentMinFaceDetectionConfidence,
-                minFaceTrackingConfidence = mainViewModel.currentMinFaceTrackingConfidence,
-                minFacePresenceConfidence = mainViewModel.currentMinFacePresenceConfidence,
-                maxNumFaces = mainViewModel.currentMaxFaces,
-                currentDelegate = mainViewModel.currentDelegate,
+                minFaceDetectionConfidence = viewModel.currentMinFaceDetectionConfidence,
+                minFaceTrackingConfidence = viewModel.currentMinFaceTrackingConfidence,
+                minFacePresenceConfidence = viewModel.currentMinFacePresenceConfidence,
+                maxNumFaces = viewModel.currentMaxFaces,
+                currentDelegate = viewModel.currentDelegate,
                 faceLandmarkerHelperListener = this
             )
 
@@ -124,8 +123,6 @@ class FaceFragment @Inject constructor() : BaseFragment<FragmentFaceBinding>(),
         }
 
         initScreenCapture()
-
-        observeViewModel()
 
     }
 
@@ -141,28 +138,17 @@ class FaceFragment @Inject constructor() : BaseFragment<FragmentFaceBinding>(),
     override fun onPause() {
         super.onPause()
 
-        if(this::faceLandmarkerHelper.isInitialized) {
-            mainViewModel.setMaxFaces(faceLandmarkerHelper.maxNumFaces)
-            mainViewModel.setMinFaceDetectionConfidence(faceLandmarkerHelper.minFaceDetectionConfidence)
-            mainViewModel.setMinFaceTrackingConfidence(faceLandmarkerHelper.minFaceTrackingConfidence)
-            mainViewModel.setMinFacePresenceConfidence(faceLandmarkerHelper.minFacePresenceConfidence)
-            mainViewModel.setDelegate(faceLandmarkerHelper.currentDelegate)
+        if(this::faceLandmarkerHelper.isInitialized && !backgroundExecutor.isShutdown) {
+            viewModel.setMaxFaces(faceLandmarkerHelper.maxNumFaces)
+            viewModel.setMinFaceDetectionConfidence(faceLandmarkerHelper.minFaceDetectionConfidence)
+            viewModel.setMinFaceTrackingConfidence(faceLandmarkerHelper.minFaceTrackingConfidence)
+            viewModel.setMinFacePresenceConfidence(faceLandmarkerHelper.minFacePresenceConfidence)
+            viewModel.setDelegate(faceLandmarkerHelper.currentDelegate)
 
             // Close the FaceLandmarkerHelper and release resources
             backgroundExecutor.execute { faceLandmarkerHelper.clearFaceLandmarker() }
         }
 
-    }
-
-    override fun onDestroyView() {
-        super.onDestroyView()
-
-        // Shut down our background executor.
-        backgroundExecutor.shutdown()
-        backgroundExecutor.awaitTermination(
-            Long.MAX_VALUE,
-            TimeUnit.NANOSECONDS
-        )
     }
 
     // Initialize CameraX, and prepare to bind the camera use cases
@@ -326,7 +312,7 @@ class FaceFragment @Inject constructor() : BaseFragment<FragmentFaceBinding>(),
 
         FileUtil.writeBitmapToFile(bitmap, Bitmap.CompressFormat.JPEG, 80, file.path)
 
-        faceViewModel.uploadImage(makeRequestBody(file))
+        viewModel.uploadImage(makeRequestBody(file))
     }
 
     private fun makeRequestBody(file: File): MultipartBody.Part =
@@ -364,7 +350,7 @@ class FaceFragment @Inject constructor() : BaseFragment<FragmentFaceBinding>(),
         val amPm = format.format(currentTime)
 
         return when {
-            amPm == "오전" && formatTime.format(Date()).toInt() <= 10 -> "0"
+            amPm == "오전" && formatTime.format(Date()).toInt() < 10 -> "0"
             amPm == "오후" && formatTime.format(Date()).toInt() > 6 -> "2"
             else -> "1"
         }
@@ -385,7 +371,7 @@ class FaceFragment @Inject constructor() : BaseFragment<FragmentFaceBinding>(),
 
     private fun observeViewModel() {
 
-        faceViewModel.uploadImageState.onUiState(
+        viewModel.uploadImageState.onUiState(
             success = {
                 Log.d("123123123", "사진 업로드 성공!!!: ${it.files[0].imginfo}")
                 val timeStamp = SimpleDateFormat("yyyy/MM/dd").format(Date())
@@ -396,8 +382,10 @@ class FaceFragment @Inject constructor() : BaseFragment<FragmentFaceBinding>(),
 
                 mainViewModel.imgName = imgName
 
+                clearFaceView()
+
                 mainViewModel.screenState = MainViewModel.ScreenState.Analyze
-                replaceFragment(R.id.fragmentContainer, AnalyzeFragment(), parentFragmentManager)
+                replaceFragment(R.id.fragmentContainer, FaceAnalyzeFragment(), parentFragmentManager)
 
             },
             error = {
@@ -409,6 +397,21 @@ class FaceFragment @Inject constructor() : BaseFragment<FragmentFaceBinding>(),
             }
         )
 
+    }
+
+    private fun clearFaceView() {
+        binding.overlay.clear()
+        // Shut down our background executor.
+        backgroundExecutor.execute { faceLandmarkerHelper.clearFaceLandmarker() }
+        backgroundExecutor.shutdown()
+        backgroundExecutor.awaitTermination(
+            Long.MAX_VALUE,
+            TimeUnit.NANOSECONDS
+        )
+        preview = null
+        imageAnalyzer = null
+        camera = null
+        cameraProvider = null
     }
 
 

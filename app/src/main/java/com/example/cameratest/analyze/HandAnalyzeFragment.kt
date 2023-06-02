@@ -10,30 +10,33 @@ import android.view.LayoutInflater
 import android.view.ViewGroup
 import android.widget.Toast
 import androidx.fragment.app.activityViewModels
-import com.example.cameratest.FaceLandmarkerHelper
-import com.example.cameratest.FaceLandmarkerHelper.Companion.TAG
+import androidx.fragment.app.viewModels
 import com.example.cameratest.MainViewModel
 import com.example.cameratest.R
-import com.example.cameratest.databinding.FragmentAnalyzeBinding
-import com.example.cameratest.result.ResultFragment
+import com.example.cameratest.databinding.FragmentHandAnalyzeBinding
+import com.example.cameratest.detection.HandFragment
+import com.example.cameratest.landmarkerhelper.HandLandmarkerHelper
+import com.example.cameratest.result.HandResultFragment
 import com.example.common_base.BaseFragment
 import com.google.mediapipe.tasks.vision.core.RunningMode
 import dagger.hilt.android.AndroidEntryPoint
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
 @AndroidEntryPoint
-class AnalyzeFragment @Inject constructor() : BaseFragment<FragmentAnalyzeBinding>(), FaceLandmarkerHelper.LandmarkerListener {
+class HandAnalyzeFragment @Inject constructor() : BaseFragment<FragmentHandAnalyzeBinding>(), HandLandmarkerHelper.LandmarkerListener {
+
 
     override fun createFragmentBinding(
         inflater: LayoutInflater,
         container: ViewGroup?
-    ) = FragmentAnalyzeBinding.inflate(inflater, container, false)
+    ) = FragmentHandAnalyzeBinding.inflate(inflater, container, false)
 
-    private lateinit var faceLandmarkerHelper: FaceLandmarkerHelper
+    private lateinit var handLandmarkerHelper: HandLandmarkerHelper
     private val mainViewModel: MainViewModel by activityViewModels()
-
+    private val viewModel: HandAnalyzeViewModel by viewModels()
     private lateinit var backgroundExecutor: ScheduledExecutorService
 
     override fun initFragment() {
@@ -46,14 +49,28 @@ class AnalyzeFragment @Inject constructor() : BaseFragment<FragmentAnalyzeBindin
     private fun setOnClickListeners() = with(binding) {
 
         btnRecapture.setOnClickListener {
-
+            clearHandView()
+            mainViewModel.screenState = MainViewModel.ScreenState.Detect
+            replaceFragment(R.id.fragmentContainer, HandFragment(), parentFragmentManager)
         }
 
         btnResult.setOnClickListener {
+            clearHandView()
             mainViewModel.screenState = MainViewModel.ScreenState.Result
-            replaceFragment(R.id.fragmentContainer, ResultFragment(), parentFragmentManager)
+            replaceFragment(R.id.fragmentContainer, HandResultFragment(), parentFragmentManager)
         }
 
+    }
+
+    private fun clearHandView() {
+        binding.overlay.clear()
+        // Shut down our background executor.
+        backgroundExecutor.execute { handLandmarkerHelper.clearHandLandmarker() }
+        backgroundExecutor.shutdown()
+        backgroundExecutor.awaitTermination(
+            Long.MAX_VALUE,
+            TimeUnit.NANOSECONDS
+        )
     }
 
     private fun runDetectionOnImage(uri: Uri) {
@@ -74,24 +91,24 @@ class AnalyzeFragment @Inject constructor() : BaseFragment<FragmentAnalyzeBindin
             ?.let { bitmap ->
                 binding.imageResult.setImageBitmap(bitmap)
 
-                // Run face landmarker on the input image
+                // Run hand landmarker on the input image
                 backgroundExecutor.execute {
 
-                    faceLandmarkerHelper =
-                        FaceLandmarkerHelper(
-                            context = requireContext(),
-                            runningMode = RunningMode.IMAGE,
-                            minFaceDetectionConfidence = mainViewModel.currentMinFaceDetectionConfidence,
-                            minFaceTrackingConfidence = mainViewModel.currentMinFaceTrackingConfidence,
-                            minFacePresenceConfidence = mainViewModel.currentMinFacePresenceConfidence,
-                            maxNumFaces = mainViewModel.currentMaxFaces,
-                            currentDelegate = mainViewModel.currentDelegate
-                        )
+                    handLandmarkerHelper = HandLandmarkerHelper(
+                        context = requireContext(),
+                        runningMode = RunningMode.LIVE_STREAM,
+                        minHandDetectionConfidence = viewModel.currentMinHandDetectionConfidence,
+                        minHandTrackingConfidence = viewModel.currentMinHandTrackingConfidence,
+                        minHandPresenceConfidence = viewModel.currentMinHandPresenceConfidence,
+                        maxNumHands = viewModel.currentMaxHands,
+                        currentDelegate = viewModel.currentDelegate,
+                        handLandmarkerHelperListener = this
+                    )
 
-                    faceLandmarkerHelper.detectImage(bitmap)?.let { result ->
+                    handLandmarkerHelper.detectImage(bitmap)?.let { result ->
                         activity?.runOnUiThread {
                             binding.overlay.setResults(
-                                result.result,
+                                result.results[0],
                                 bitmap.height,
                                 bitmap.width,
                                 RunningMode.IMAGE,
@@ -99,9 +116,9 @@ class AnalyzeFragment @Inject constructor() : BaseFragment<FragmentAnalyzeBindin
                             )
 
                         }
-                    } ?: run { Log.e(TAG, "Error running face landmarker.") }
+                    } ?: run { Log.e(HandLandmarkerHelper.TAG, "Error running hand landmarker.") }
 
-                    faceLandmarkerHelper.clearFaceLandmarker()
+                    handLandmarkerHelper.clearHandLandmarker()
                 }
             }
     }
@@ -112,8 +129,9 @@ class AnalyzeFragment @Inject constructor() : BaseFragment<FragmentAnalyzeBindin
         }
     }
 
-    override fun onResults(resultBundle: FaceLandmarkerHelper.ResultBundle) {
+    override fun onResults(resultBundle: HandLandmarkerHelper.ResultBundle) {
 
     }
+
 
 }

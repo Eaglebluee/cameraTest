@@ -25,17 +25,6 @@
                 tools:text="제목 영역" />
 
             <TextView
-                android:id="@+id/txtSubTitle"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginHorizontal="5dp"
-                android:layout_marginTop="15dp"
-                android:textColor="@color/black"
-                android:textSize="15dp"
-                app:layout_constraintTop_toBottomOf="@id/txtTitle"
-                tools:text="서브 타이틀 영역" />
-
-            <TextView
                 android:id="@+id/txtDesc"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -43,8 +32,8 @@
                 android:layout_marginVertical="15dp"
                 android:textColor="@color/black"
                 android:textSize="15dp"
+                app:layout_constraintTop_toBottomOf="@id/txtTitle"
                 app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintTop_toBottomOf="@id/txtSubTitle"
                 tools:text="내용 영역" />
 
         </androidx.constraintlayout.widget.ConstraintLayout>

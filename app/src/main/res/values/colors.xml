@@ -22,4 +22,8 @@
 
     <color name="isInGuideLine">#00FF80</color>
     <color name="isOutGuideLine">#FF0000</color>
+
+    <color name="hand_result_emotion">#FF0001</color>
+    <color name="hand_result_brain">#00FF00</color>
+    <color name="hand_result_life">#4AA8D8</color>
 </resources>
