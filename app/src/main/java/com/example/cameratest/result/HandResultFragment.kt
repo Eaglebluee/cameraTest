@@ -40,44 +40,13 @@ class HandResultFragment @Inject constructor() : BaseFragment<FragmentHandResult
     private var handResultAdapter : HandResultAdapter? = null
     private lateinit var handLandmarkerHelper: HandLandmarkerHelper
     private lateinit var backgroundExecutor: ScheduledExecutorService
-    private val handCoordList = mutableListOf<List<List<Int>>>()
 
     override fun initFragment() {
-        observeViewModel()
         initAdapter()
         setClickListeners()
-        showResultImage(mainViewModel.photoUri)
-        getResultData()
         runDetectionOnImage(mainViewModel.photoUri)
         setPageListener()
-    }
-
-    private fun observeViewModel() = with(viewModel) {
-
-        reportState.onUiState(
-            success = {
-                Log.d("123123123", "분석 결과 받기 성공!!")
-                Log.d("123123123", "결과 : ${it}")
-
-                val handResultList = mutableListOf<Pair<String, String>>()
-                handResultList.add(Pair(it.feelTitle, it.feelContent))
-                handResultList.add(Pair(it.brainTitle, it.brainContent))
-                handResultList.add(Pair(it.lifeTitle, it.lifeContent))
-                handResultAdapter?.submit(handResultList)
-
-                handCoordList.add(it.feelCoordinate)
-                handCoordList.add(it.brainCoordinate)
-                handCoordList.add(it.lifeCoordinate)
-
-                // 초기값 세팅
-                binding.overlay.handResult = it.feelCoordinate
-                binding.overlay.invalidate()
-
-            },
-            error = {
-                Log.d("123123123", "분석 결과 받기 실패... : $it")
-            }
-        )
+        setData()
     }
 
     private fun initAdapter() {
@@ -113,29 +82,6 @@ class HandResultFragment @Inject constructor() : BaseFragment<FragmentHandResult
             Long.MAX_VALUE,
             TimeUnit.NANOSECONDS
         )
-    }
-
-    private fun showResultImage(uri: Uri) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            val source = ImageDecoder.createSource(
-                requireActivity().contentResolver,
-                uri
-            )
-            ImageDecoder.decodeBitmap(source)
-        } else {
-            MediaStore.Images.Media.getBitmap(
-                requireActivity().contentResolver,
-                uri
-            )
-        }
-            .copy(Bitmap.Config.ARGB_8888, true)
-            ?.let { bitmap ->
-                binding.imageResult.setImageBitmap(bitmap)
-            }
-    }
-
-    private fun getResultData() {
-        viewModel.getAnalyzeReport(mainViewModel.imgName)
     }
 
     private fun runDetectionOnImage(uri: Uri) {
@@ -177,7 +123,8 @@ class HandResultFragment @Inject constructor() : BaseFragment<FragmentHandResult
                                 bitmap.height,
                                 bitmap.width,
                                 RunningMode.IMAGE,
-                                mainViewModel.screenState
+                                mainViewModel.screenState,
+                                mainViewModel.isLeft
                             )
 
                         }
@@ -196,8 +143,8 @@ class HandResultFragment @Inject constructor() : BaseFragment<FragmentHandResult
         override fun onPageSelected(position: Int) {
             super.onPageSelected(position)
 
-            if(handCoordList.isNotEmpty()) {
-                binding.overlay.handResult = handCoordList[position]
+            if(mainViewModel.handCoordList.isNotEmpty()) {
+                binding.overlay.handResult = mainViewModel.handCoordList[position]
                 binding.overlay.invalidate()
                 binding.overlay.handResultType = when(position) {
                     0 -> HandOverlayView.HandResult.Emotion
@@ -213,6 +160,16 @@ class HandResultFragment @Inject constructor() : BaseFragment<FragmentHandResult
             else binding.btnNext.visibility = View.VISIBLE
 
         }
+    }
+
+    private fun setData() {
+
+        handResultAdapter?.submit(mainViewModel.handResultDesc)
+
+        // 초기값 세팅
+        binding.overlay.handResult = mainViewModel.handCoordList[0]
+        binding.overlay.invalidate()
+
     }
 
     override fun onError(error: String, errorCode: Int) {

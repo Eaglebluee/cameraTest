@@ -124,10 +124,10 @@ class FaceOverlayView(context: Context?, attrs: AttributeSet?) :
                 val distance = top - bottom
 
                 // Draw bounding box guideline
-                val guideTop = height / 7f
-                val guideBottom = height / 7f * 5f
-                val guideLeft = width / 5f
-                val guideRight = width / 5f * 4f
+                val guideTop = height / 9f
+                val guideBottom = height / 9f * 6f
+                val guideLeft = width / 7f
+                val guideRight = width / 7f * 6f
 
                 val inGuide = top > guideTop && bottom < guideBottom && left > guideLeft && right < guideRight
                 val inLimit = distance < guideLimit

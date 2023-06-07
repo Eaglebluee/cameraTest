@@ -7,6 +7,7 @@ import android.os.Build
 import android.provider.MediaStore
 import android.util.Log
 import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
 import androidx.fragment.app.activityViewModels
@@ -41,9 +42,49 @@ class HandAnalyzeFragment @Inject constructor() : BaseFragment<FragmentHandAnaly
 
     override fun initFragment() {
 
+        clearData()
+        observeViewModel()
         setOnClickListeners()
+        getResultData()
         runDetectionOnImage(mainViewModel.photoUri)
 
+    }
+
+    private fun clearData() {
+        mainViewModel.handCoordList.clear()
+        mainViewModel.handResultDesc.clear()
+    }
+
+    private fun observeViewModel() = with(viewModel) {
+
+        reportState.onUiState(
+            success = {
+                Log.d("123123123", "분석 결과 받기 성공!!")
+                Log.d("123123123", "결과 : ${it}")
+
+
+                mainViewModel.handResultDesc.add(Pair(it.feelTitle, it.feelContent))
+                mainViewModel.handResultDesc.add(Pair(it.brainTitle, it.brainContent))
+                mainViewModel.handResultDesc.add(Pair(it.lifeTitle, it.lifeContent))
+
+                mainViewModel.handCoordList.add(it.feelCoordinate)
+                mainViewModel.handCoordList.add(it.brainCoordinate)
+                mainViewModel.handCoordList.add(it.lifeCoordinate)
+
+                // 초기값 세팅
+                binding.overlay.handAnalyzeResult = mainViewModel.handCoordList
+                binding.overlay.invalidate()
+
+            },
+            error = {
+                Log.d("123123123", "분석 결과 받기 실패... : $it")
+            },
+            finish = {
+                binding.loadingBar.visibility = View.GONE
+                binding.txtAnalyze.text = "분석 완료!!!"
+                binding.btnResult.isEnabled = true
+            }
+        )
     }
 
     private fun setOnClickListeners() = with(binding) {
@@ -73,6 +114,10 @@ class HandAnalyzeFragment @Inject constructor() : BaseFragment<FragmentHandAnaly
         )
     }
 
+    private fun getResultData() {
+        viewModel.getAnalyzeReport(mainViewModel.imgName)
+    }
+
     private fun runDetectionOnImage(uri: Uri) {
         backgroundExecutor = Executors.newSingleThreadScheduledExecutor()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -96,7 +141,7 @@ class HandAnalyzeFragment @Inject constructor() : BaseFragment<FragmentHandAnaly
 
                     handLandmarkerHelper = HandLandmarkerHelper(
                         context = requireContext(),
-                        runningMode = RunningMode.LIVE_STREAM,
+                        runningMode = RunningMode.IMAGE,
                         minHandDetectionConfidence = viewModel.currentMinHandDetectionConfidence,
                         minHandTrackingConfidence = viewModel.currentMinHandTrackingConfidence,
                         minHandPresenceConfidence = viewModel.currentMinHandPresenceConfidence,
@@ -112,7 +157,8 @@ class HandAnalyzeFragment @Inject constructor() : BaseFragment<FragmentHandAnaly
                                 bitmap.height,
                                 bitmap.width,
                                 RunningMode.IMAGE,
-                                mainViewModel.screenState
+                                mainViewModel.screenState,
+                                mainViewModel.isLeft
                             )
 
                         }

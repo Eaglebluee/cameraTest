@@ -52,6 +52,7 @@ dependencies {
     implementation(libs.bundles.mediapipe)
     implementation(libs.bundles.camerax)
     implementation(libs.bundles.retrofit)
+    implementation(libs.lottie)
 
     implementation(project(":core-data"))
     implementation(project(":core-model"))

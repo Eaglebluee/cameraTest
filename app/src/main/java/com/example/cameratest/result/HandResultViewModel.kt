@@ -20,19 +20,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class HandResultViewModel @Inject constructor(
-    private val reportHandUseCase: ReportHandUseCase
 ) : BaseViewModel() {
-
-    private val _reportState = mutableResultState<HandReportResponseData>(ResultUiState.UnInitialize)
-    val reportState = _reportState.asStateFlow()
-
-    fun getAnalyzeReport(name: String) {
-        viewModelScope.launch {
-            val json = JSONObject().apply { put("img_path", name) }
-            val raw = json.toString().toRequestBody("application/json".toMediaType())
-            reportHandUseCase.invoke(raw).resultState(this) { _reportState.value = it }
-        }
-    }
 
     private var _delegate: Int = HandLandmarkerHelper.DELEGATE_CPU
     private var _minHandDetectionConfidence: Float =

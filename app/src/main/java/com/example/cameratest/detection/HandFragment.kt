@@ -37,6 +37,7 @@ import com.example.common_util.FileUtil
 import com.google.mediapipe.tasks.vision.core.RunningMode
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -77,6 +78,8 @@ class HandFragment : BaseFragment<FragmentHandBinding>(), HandLandmarkerHelper.L
 
     override fun initFragment() {
 
+        clearData()
+
         observeViewModel()
 
         // Initialize our background executor
@@ -105,6 +108,8 @@ class HandFragment : BaseFragment<FragmentHandBinding>(), HandLandmarkerHelper.L
         initScreenCapture()
 
         setRadioBtn()
+
+        removeGuide()
 
     }
 
@@ -256,6 +261,10 @@ class HandFragment : BaseFragment<FragmentHandBinding>(), HandLandmarkerHelper.L
         return cacheRootDir.path
     }
 
+    private fun clearData() {
+        mainViewModel.isLeft = true
+    }
+
     private fun observeViewModel() {
 
         viewModel.uploadImageState.onUiState(
@@ -307,15 +316,27 @@ class HandFragment : BaseFragment<FragmentHandBinding>(), HandLandmarkerHelper.L
             when(checkedId) {
                 R.id.leftBtn -> {
                     binding.guideHand.setImageDrawable(AppCompatResources.getDrawable(requireContext(), R.drawable.hello_left))
+                    binding.overlay.isLeft = true
+                    mainViewModel.isLeft = true
                 }
                 R.id.rightBtn -> {
                     binding.guideHand.setImageDrawable(AppCompatResources.getDrawable(requireContext(), R.drawable.hello_right))
+                    binding.overlay.isLeft = false
+                    mainViewModel.isLeft = false
                 }
             }
         }
 
     }
 
+    private fun removeGuide() {
+
+        lifecycleScope.launch {
+            delay(3000)
+            binding.guideHand.visibility = View.GONE
+        }
+
+    }
 
     override fun onResume() {
         super.onResume()
@@ -427,7 +448,8 @@ class HandFragment : BaseFragment<FragmentHandBinding>(), HandLandmarkerHelper.L
             resultBundle.inputImageHeight,
             resultBundle.inputImageWidth,
             RunningMode.LIVE_STREAM,
-            mainViewModel.screenState
+            mainViewModel.screenState,
+            mainViewModel.isLeft
         )
 
         // Force a redraw

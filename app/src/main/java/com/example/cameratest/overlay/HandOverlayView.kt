@@ -37,8 +37,10 @@ class HandOverlayView(context: Context?, attrs: AttributeSet?) :
 
     private var screenState: MainViewModel.ScreenState = MainViewModel.ScreenState.Detect
 
+    var handAnalyzeResult = listOf(listOf(listOf<Int>()))
     var handResult = listOf(listOf<Int>())
     var handResultType: HandResult = HandResult.Emotion
+    var isLeft = true
 
     init {
         initPaints()
@@ -121,8 +123,16 @@ class HandOverlayView(context: Context?, attrs: AttributeSet?) :
             val drawableGuideRect = RectF(guideLeft, guideTop, guideRight, guideBottom)
             canvas.drawRect(drawableGuideRect, guidePaint)
 
+            val guideText = when {
+                !isInGuideLine.value!! -> "손의 위치를 올바르게 조정해주세요"
+                !isInGuideLine.value!! && isLeft -> "왼손을 펴서 박스안에 맞춰주세요"
+                !isInGuideLine.value!! && !isLeft -> "오른손을 펴서 박스안에 맞춰주세요"
+                else -> "아래 파란 버튼을 눌러서 촬영해주세요"
+            }
+
+
             canvas.drawText(
-                "손을 펴서 가이드라인에 맞춰주세요",
+                guideText,
                 200f,
                 height - 150f,
                 textPaint
@@ -131,7 +141,61 @@ class HandOverlayView(context: Context?, attrs: AttributeSet?) :
     }
 
     private fun drawAnalyzeScreen(canvas: Canvas) {
+        results?.let { handLandmarkerResult ->
 
+            if(handAnalyzeResult.size > 1) {
+
+                val scale = 0.9f * width.toFloat() / 1050f
+                val leftX = imageWidth / 2f
+
+                for(i in handAnalyzeResult.indices) {
+                    val lines = mutableListOf<Float>()
+                    linePaint.color = when(i) {
+                        0 -> ContextCompat.getColor(context!!, R.color.hand_result_emotion)
+                        1 -> ContextCompat.getColor(context!!, R.color.hand_result_brain)
+                        else -> ContextCompat.getColor(context!!, R.color.hand_result_life)
+                    }
+                    if(isLeft) {
+                        for (j in 0 until handAnalyzeResult[i].size - 1) {
+
+                            val startX =
+                                handAnalyzeResult[i][j][0] * imageWidth / 256f * scale
+                            val startY =
+                                handAnalyzeResult[i][j][1] * imageHeight / 256f * scale
+                            val endX =
+                                handAnalyzeResult[i][j+1][0] * imageWidth / 256f * scale
+                            val endY =
+                                handAnalyzeResult[i][j+1][1] * imageHeight / 256f * scale
+                            lines.add(startX)
+                            lines.add(startY)
+                            lines.add(endX)
+                            lines.add(endY)
+                        }
+                    }else {
+                        for (j in 0 until handAnalyzeResult[i].size - 1) {
+
+                            val startX =
+                                handAnalyzeResult[i][j][0] * imageWidth / 256f * scale + leftX
+                            val startY =
+                                handAnalyzeResult[i][j][1] * imageHeight / 256f * scale
+                            val endX =
+                                handAnalyzeResult[i][j+1][0] * imageWidth / 256f * scale + leftX
+                            val endY =
+                                handAnalyzeResult[i][j+1][1] * imageHeight / 256f * scale
+                            lines.add(startX)
+                            lines.add(startY)
+                            lines.add(endX)
+                            lines.add(endY)
+                        }
+                    }
+
+
+                    canvas.drawLines(lines.toFloatArray(), linePaint)
+                }
+
+            }
+
+        }
     }
 
     private fun drawResultScreen(canvas: Canvas) {
@@ -147,22 +211,38 @@ class HandOverlayView(context: Context?, attrs: AttributeSet?) :
                 }
 
                 val scale = 0.9f * width.toFloat() / 1050f
+                val leftX = imageWidth / 2f
 
-                for (i in 0 until handResult.size - 1) {
-
-
-                    val startX =
-                        handResult[i][0] * imageWidth / 256f * scale
-                    val startY =
-                        handResult[i][1] * imageHeight / 256f * scale
-                    val endX =
-                        handResult[i+1][0] * imageWidth / 256f * scale
-                    val endY =
-                        handResult[i+1][1] * imageHeight / 256f * scale
-                    lines.add(startX)
-                    lines.add(startY)
-                    lines.add(endX)
-                    lines.add(endY)
+                if(isLeft) {
+                    for (i in 0 until handResult.size - 1) {
+                        val startX =
+                            handResult[i][0] * imageWidth / 256f * scale
+                        val startY =
+                            handResult[i][1] * imageHeight / 256f * scale
+                        val endX =
+                            handResult[i+1][0] * imageWidth / 256f * scale
+                        val endY =
+                            handResult[i+1][1] * imageHeight / 256f * scale
+                        lines.add(startX)
+                        lines.add(startY)
+                        lines.add(endX)
+                        lines.add(endY)
+                    }
+                }else {
+                    for (i in 0 until handResult.size - 1) {
+                        val startX =
+                            handResult[i][0] * imageWidth / 256f * scale + leftX
+                        val startY =
+                            handResult[i][1] * imageHeight / 256f * scale
+                        val endX =
+                            handResult[i+1][0] * imageWidth / 256f * scale + leftX
+                        val endY =
+                            handResult[i+1][1] * imageHeight / 256f * scale
+                        lines.add(startX)
+                        lines.add(startY)
+                        lines.add(endX)
+                        lines.add(endY)
+                    }
                 }
 
                 canvas.drawLines(lines.toFloatArray(), linePaint)
@@ -177,7 +257,8 @@ class HandOverlayView(context: Context?, attrs: AttributeSet?) :
         imageHeight: Int,
         imageWidth: Int,
         runningMode: RunningMode = RunningMode.IMAGE,
-        screenState: MainViewModel.ScreenState
+        screenState: MainViewModel.ScreenState,
+        isLeft: Boolean
     ) {
         results = handLandmarkerResults
 
@@ -185,6 +266,7 @@ class HandOverlayView(context: Context?, attrs: AttributeSet?) :
 
         this.imageHeight = imageHeight
         this.imageWidth = imageWidth
+        this.isLeft = isLeft
 
         scaleFactor = when (runningMode) {
             RunningMode.IMAGE,

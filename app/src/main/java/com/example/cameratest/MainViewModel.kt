@@ -17,6 +17,10 @@ class MainViewModel @Inject constructor(
     lateinit var photoUri : Uri
     lateinit var imgName : String
     var screenState: ScreenState = ScreenState.Detect
+    val handResultDesc = mutableListOf<Pair<String, String>>()
+    val handCoordList = mutableListOf(listOf(listOf<Int>()))
+    var isLeft = true
+
 
     private val _toMainScreen = MutableSharedFlow<Unit>()
     val toMainScreen = _toMainScreen.asSharedFlow()
